@@ -82,13 +82,22 @@ public sealed class SaveFile
     }
 
     /// <summary>The game's committed save folder (&lt;profile&gt;\save\&lt;account&gt;) and its slots.</summary>
+    /// <summary>
+    /// The folder that holds save, save-tx and the trainer's backups: "profile" for the Ocarina port, "user" for
+    /// Hylian Triforce (its game folder is %LOCALAPPDATA%\HylianTriforce\Game). Null when neither is there.
+    /// </summary>
+    public static string? DataDir(string gameDir) =>
+        new[] { "profile", "user" }.Select(n => System.IO.Path.Combine(gameDir, n))
+            .FirstOrDefault(d => Directory.Exists(System.IO.Path.Combine(d, "save")));
+
     public static (string? accountDir, string[] slots, string? problem) FindSlots(string gameDir)
     {
-        var save = System.IO.Path.Combine(gameDir, "profile", "save");
-        if (!Directory.Exists(save)) return (null, Array.Empty<string>(), $"No saves found in {save}.");
+        var data = DataDir(gameDir);
+        if (data == null) return (null, Array.Empty<string>(), $"No saves found in {gameDir} (no profile\\save or user\\save folder).");
+        var save = System.IO.Path.Combine(data, "save");
         var accounts = Directory.GetDirectories(save);
         if (accounts.Length != 1) return (null, Array.Empty<string>(), $"Expected one account folder in {save}, found {accounts.Length}.");
-        var tx = System.IO.Path.Combine(gameDir, "profile", "save-tx");
+        var tx = System.IO.Path.Combine(data, "save-tx");
         if (Directory.Exists(tx) && Directory.GetDirectories(tx, "ready-*").Length > 0)
             return (accounts[0], Array.Empty<string>(),
                 "The game has a save it has not finished writing (save-tx\\ready). Start the game once and quit from its menu, then try again.");

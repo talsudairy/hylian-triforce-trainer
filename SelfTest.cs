@@ -19,6 +19,40 @@ public static class SelfTest
         void Check(string what, bool ok) { log.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}"); if (!ok) fails++; }
         try
         {
+            if (mode == "--selftest-read")   // attached to the running game, reads only: nothing is written
+            {
+                using var g = GameMemory.Attach();
+                Check($"attached to {g.Runner.Name}, process {g.ProcessId}, tables verified", true);
+                foreach (var n in new[] { "PlayerStatus.Life", "PlayerStatus.MaxLife", "PlayerStatus.CurrentRupee", "PlayerStatus.MPMax",
+                                          "PouchData.Item_DekuNut.StockNum", "IsGet.Weapon_Sword_Master" })
+                {
+                    var f = Fields.All.FirstOrDefault(x => x.Name == n);
+                    if (f == null) { log.WriteLine($"     {n}: not in the field table"); continue; }
+                    log.WriteLine($"     {n} = {g.Get(f)}");
+                }
+                var kept = Kept.Health();
+                var t = System.Diagnostics.Stopwatch.StartNew();
+                int found = kept.Find(g);
+                Check($"hearts handle search: {found} found in {t.Elapsed.TotalSeconds:0.0} s, all valid: {kept.Valid(g)}", found > 0);
+                return fails == 0 ? 0 : 1;
+            }
+            if (mode == "--selftest-rupees")   // one live change, then Undo: rupees to 99 and back
+            {
+                using var g = GameMemory.Attach();
+                Check($"attached to {g.Runner.Name}, process {g.ProcessId}, tables verified", true);
+                var rup = Fields.Get("PlayerStatus.CurrentRupee");
+                uint r0 = g.Get(rup);
+                log.WriteLine($"     before: rupees {r0}");
+                g.Apply("Set rupees (test)", new[] { (rup, 99u) });
+                Check($"rupees read back 99: {g.Get(rup)}", g.Get(rup) == 99);
+                Thread.Sleep(3000);
+                Check($"rupees still 99 after 3 s (the game kept it): {g.Get(rup)}", g.Get(rup) == 99);
+                log.WriteLine("     " + g.Undo());
+                Check($"undo put rupees back to {r0}: {g.Get(rup)}", g.Get(rup) == r0);
+                Thread.Sleep(1000);
+                Check($"rupees still {r0} after 1 s: {g.Get(rup)}", g.Get(rup) == r0);
+                return fails == 0 ? 0 : 1;
+            }
             if (mode == "--selftest-save")
             {
                 var (_, slots, problem) = SaveFile.FindSlots(args[1]);

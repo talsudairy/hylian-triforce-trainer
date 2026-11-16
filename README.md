@@ -1,6 +1,6 @@
 # Hylian Triforce Trainer & Save Editor
 
-A Windows trainer and save editor for **The Legend of Zelda: Ocarina of Time**, running as the native PC port (`ocarina.exe`, the Ocarina Recomp / OcarinaDLSS build).
+A Windows trainer and save editor for **The Legend of Zelda: Ocarina of Time**, running as the native PC port (`ocarina.exe`, the Ocarina Recomp / OcarinaDLSS build) or in **Hylian Triforce** (`Triforce.exe`, started by `HylianTriforce.exe`).
 
 It has two halves:
 
@@ -17,7 +17,7 @@ It has two halves:
 
 | | |
 |---|---|
-| **Attach to the game** | Finds `ocarina.exe` and checks the game's data tables against the expected layout before writing anything. |
+| **Attach to the game** | Finds `ocarina.exe` (or a renamed copy) or Hylian Triforce's `Triforce.exe`, and checks the game's data tables against the expected layout before writing anything. |
 | **Rupees and wallet** | Set your rupees, upgrade your wallet, or tick **Infinite rupees** to keep the wallet full (99 / 200 / 500). |
 | **Items, weapons, songs and upgrades** | Add or remove any item by category, several at once. A check mark shows what you already have. |
 | **Bottles and potions** | Put anything in any of the five bottles: a fairy, potions, a fish, a bug and so on. |

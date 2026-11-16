@@ -16,9 +16,27 @@ namespace Tozot;
 ///   Int   40-byte records, copies at +0x1c and +0x20
 ///   Enum  56-byte records, copies at +0x1c and +0x20 (the value's name hash)
 /// </summary>
+/// <summary>
+/// Where a game runner keeps the game. Both runners run the same game build (GameDataList.Product.110), so the tables,
+/// field indices and record layouts are the same; only the addresses differ.
+///   Ocarina port (ocarina.exe): guest addresses are host addresses; the program sits at 0x70_xxxx_xxxx.
+///   Hylian Triforce (Triforce.exe, the user's own runner): guest memory is mapped at host 0x1000_0000_0000 + guest
+///   address, and the 96 MB program image is loaded at guest 0x8000_0000 (read from its log and memory, 2026-11-16).
+/// Every pointer the game stores is a guest address; Host() turns it into one this process can read.
+/// </summary>
+public sealed record Runner(string Name, ulong Arena, ulong ManagerGlobal, ulong ProgramStart, ulong ProgramEnd, ulong ScanStart, ulong ScanEnd)
+{
+    public static readonly Runner OcarinaPort = new("the Ocarina port", 0, 0x7004c7e180, 0x70_0000_0000, 0x71_0000_0000, 0, 1UL << 47);
+    public static readonly Runner HylianTriforce = new("Hylian Triforce", 0x1000_0000_0000, 0x84c9e180, 0x8000_0000, 0x8600_0000,
+        0x1000_0000_0000, 0x1000_0000_0000 + (1UL << 39));
+
+    public ulong Host(ulong guest) => Arena + guest;
+    /// <summary>True for a pointer into the game's program (a record's descriptor, a handle's class).</summary>
+    public bool InProgram(ulong guest) => guest >= ProgramStart && guest < ProgramEnd;
+}
+
 public sealed class GameMemory : IDisposable
 {
-    const ulong ManagerGlobal = 0x7004c7e180;
     const uint Access = 0x0010 | 0x0020 | 0x0008 | 0x0400;   // VM_READ | VM_WRITE | VM_OPERATION | QUERY_INFORMATION
 
     [DllImport("kernel32", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
@@ -31,32 +49,39 @@ public sealed class GameMemory : IDisposable
 
     readonly IntPtr handle;
     public int ProcessId { get; }
-    ulong manager;
+    public Runner Runner { get; }
+    ulong manager;   // host address
 
     /// <summary>The writes of the last action, for Undo: where, and the bytes that were there.</summary>
     public List<(Field field, byte[] before)> LastAction { get; } = new();
     public string? LastActionName { get; private set; }
 
-    GameMemory(int pid, IntPtr h) { ProcessId = pid; handle = h; }
+    GameMemory(int pid, IntPtr h, Runner r) { ProcessId = pid; handle = h; Runner = r; }
 
     /// <summary>
-    /// The running game: ocarina.exe, or a renamed copy of it such as ocarina-dlss.exe. "Ocarina of Time.exe" is only
-    /// the small launcher that starts it, so it is skipped. Attach still verifies the layout before any write.
+    /// The running game: ocarina.exe, or a renamed copy of it such as ocarina-dlss.exe ("Ocarina of Time.exe" is only
+    /// the small launcher that starts it, so it is skipped), or Triforce.exe, the game that Hylian Triforce
+    /// (HylianTriforce.exe, its launcher) starts. Attach still verifies the layout before any write.
     /// </summary>
-    public static Process? FindGame() =>
-        Process.GetProcesses()
-            .Where(p => p.ProcessName.StartsWith("ocarina", StringComparison.OrdinalIgnoreCase)
-                     && !p.ProcessName.Equals("Ocarina of Time", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.ProcessName.Equals("ocarina", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-            .FirstOrDefault();
+    public static (Process process, Runner runner)? FindGame()
+    {
+        var all = Process.GetProcesses();
+        var port = all.Where(p => p.ProcessName.StartsWith("ocarina", StringComparison.OrdinalIgnoreCase)
+                               && !p.ProcessName.Equals("Ocarina of Time", StringComparison.OrdinalIgnoreCase))
+                      .OrderBy(p => p.ProcessName.Equals("ocarina", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                      .FirstOrDefault();
+        if (port != null) return (port, Runner.OcarinaPort);
+        var tri = all.FirstOrDefault(p => p.ProcessName.Equals("Triforce", StringComparison.OrdinalIgnoreCase));
+        return tri != null ? (tri, Runner.HylianTriforce) : null;
+    }
 
     /// <summary>Attaches and verifies the manager; throws with a plain reason when anything does not match.</summary>
     public static GameMemory Attach()
     {
-        var p = FindGame() ?? throw new InvalidOperationException("The game is not running. Start Ocarina of Time first.");
+        var (p, runner) = FindGame() ?? throw new InvalidOperationException("The game is not running. Start Ocarina of Time or Hylian Triforce first.");
         var h = OpenProcess(Access, false, p.Id);
         if (h == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not open the game's process");
-        var g = new GameMemory(p.Id, h);
+        var g = new GameMemory(p.Id, h, runner);
         try { g.Verify(); }
         catch { g.Dispose(); throw; }
         return g;
@@ -77,7 +102,7 @@ public sealed class GameMemory : IDisposable
     void Verify()
     {
         ulong ptr;
-        try { ptr = U64(ManagerGlobal); manager = U64(ptr); }
+        try { ptr = U64(Runner.Host(Runner.ManagerGlobal)); manager = Runner.Host(U64(Runner.Host(ptr))); }
         catch { throw new InvalidOperationException("The game is still starting, or this is not the supported game version. Load your save, then try again."); }
         foreach (var (type, count) in new[] { (FieldType.Bool, Fields.BoolCount), (FieldType.Int, Fields.IntCount), (FieldType.Enum, Fields.EnumCount) })
         {
@@ -91,7 +116,7 @@ public sealed class GameMemory : IDisposable
     (uint count, ulong records, ulong map, uint cap) Block(FieldType t)
     {
         ulong o = manager + 0x10 + 0x60 * (ulong)(int)t;
-        return (U32(o), U64(o + 8), U64(o + 0x10), U32(o + 0x1c));
+        return (U32(o), Runner.Host(U64(o + 8)), Runner.Host(U64(o + 0x10)), U32(o + 0x1c));   // host addresses
     }
 
     static (int size, int first, int width) Layout(FieldType t) => t switch
@@ -117,7 +142,7 @@ public sealed class GameMemory : IDisposable
                     throw new InvalidOperationException($"{f.Name}: the game's table does not match the expected layout. Nothing was changed.");
                 ulong rec = records + idx * (ulong)Layout(f.Type).size;
                 ulong desc = U64(rec);
-                if (desc >> 32 != 0x70)
+                if (!Runner.InProgram(desc))
                     throw new InvalidOperationException($"{f.Name}: the record does not look like a GameData record. Nothing was changed.");
                 return rec;
             }
@@ -210,8 +235,8 @@ public sealed class GameMemory : IDisposable
         var key = BitConverter.GetBytes(hash);
         const int Chunk = 16 << 20;
         var buf = new byte[Chunk];
-        ulong addr = 0;
-        while (addr < 1UL << 47 && VirtualQueryEx(handle, addr, out var mi, Marshal.SizeOf<MemInfo>()) != 0)
+        ulong addr = Runner.ScanStart;   // Hylian Triforce: only its guest memory, not the runner's own caches
+        while (addr < Runner.ScanEnd && VirtualQueryEx(handle, addr, out var mi, Marshal.SizeOf<MemInfo>()) != 0)
         {
             if (mi.State == 0x1000 && mi.Protect == 0x04)   // MEM_COMMIT, PAGE_READWRITE
                 for (ulong off = 0; off < mi.Size; off += Chunk - 16)
@@ -225,7 +250,7 @@ public sealed class GameMemory : IDisposable
                         if ((at & 3) != 0) continue;
                         ulong desc = BitConverter.ToUInt64(buf, at - 12);
                         ulong obj = mi.Base + off + (ulong)at - 12;
-                        if (desc >> 32 == 0x70 && !found.Contains(obj)) found.Add(obj);
+                        if (Runner.InProgram(desc) && !found.Contains(obj)) found.Add(obj);
                     }
                 }
             addr = mi.Base + mi.Size;
@@ -238,7 +263,7 @@ public sealed class GameMemory : IDisposable
     {
         var b = new byte[16];
         if (!ReadProcessMemory(handle, obj, b, 16, out var got) || got != 16) return null;
-        if (BitConverter.ToUInt64(b, 0) >> 32 != 0x70 || BitConverter.ToUInt32(b, 12) != hash) return null;
+        if (!Runner.InProgram(BitConverter.ToUInt64(b, 0)) || BitConverter.ToUInt32(b, 12) != hash) return null;
         return BitConverter.ToUInt32(b, 8);
     }
 

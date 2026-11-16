@@ -134,7 +134,7 @@ public sealed class MainWindow : Window
         if (GameMemory.FindGame() != null)
         {
             live = GameMemory.Attach();
-            liveStatus.Text = $"Attached (process {live.ProcessId}), checks passed"; liveStatus.Foreground = Theme.Good;
+            liveStatus.Text = $"Attached to {live.Runner.Name} (process {live.ProcessId}), checks passed"; liveStatus.Foreground = Theme.Good;
             RefreshLive();
             Log("Attached. The game's data tables match the expected layout.");
             foreach (var b in new[] { health.Box, itemBoxes.Keys.First() }) { restoring = true; b.IsChecked = true; restoring = false; }
@@ -545,7 +545,7 @@ public sealed class MainWindow : Window
         live?.Dispose();
         live = null;
         live = GameMemory.Attach();
-        liveStatus.Text = $"Attached (process {live.ProcessId}), checks passed";
+        liveStatus.Text = $"Attached to {live.Runner.Name} (process {live.ProcessId}), checks passed";
         liveStatus.Foreground = Theme.Good;
         Log("Attached. The game's data tables match the expected layout (Bool 11292, Int 1259, Enum 130 entries).");
         RefreshLive();
@@ -597,12 +597,12 @@ public sealed class MainWindow : Window
         var backups = Theme.Button("Open backups");
         backups.Click += (_, _) => Guard(() =>
         {
-            var d = Path.Combine(gameDir, "profile", "TOZOT-backups");
+            var d = Path.Combine(SaveFile.DataDir(gameDir) ?? throw new InvalidOperationException("No saves in this game folder yet."), "TOZOT-backups");
             Directory.CreateDirectory(d);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{d}\"") { UseShellExecute = true });
         });
         p.Children.Add(Theme.Card("Save slot", Theme.Row(saveSlot, reload, backups), saveState,
-            Theme.Label("Every change backs up the whole slot first, into profile\\TOZOT-backups.", dim: true)));
+            Theme.Label("Every change backs up the whole slot first, into a TOZOT-backups folder next to the game's save folder.", dim: true)));
 
         var heal = Theme.Button("Heal", accent: true);
         heal.Click += (_, _) => SaveDo("Heal", s => new[] { (Fields.Get("PlayerStatus.Life"), s.Get(Fields.Get("PlayerStatus.MaxLife"))) });
@@ -854,7 +854,7 @@ public sealed class MainWindow : Window
 
     void PickGameDir()
     {
-        var d = new OpenFolderDialog { Title = "The game's folder (the one with Ocarina of Time.exe)", InitialDirectory = gameDir };
+        var d = new OpenFolderDialog { Title = "The game's folder (Ocarina of Time's, or Hylian Triforce's AppData\\Local\\HylianTriforce\\Game)", InitialDirectory = gameDir };
         if (d.ShowDialog(this) != true) return;
         gameDir = d.FolderName;
         try
@@ -869,7 +869,7 @@ public sealed class MainWindow : Window
     void ShowGameDir()
     {
         gameDirText.Text = gameDir;
-        gameDirText.Foreground = Directory.Exists(Path.Combine(gameDir, "profile")) ? Theme.Text : Theme.Bad;
+        gameDirText.Foreground = SaveFile.DataDir(gameDir) != null ? Theme.Text : Theme.Bad;
         LoadSlots();
     }
 }
