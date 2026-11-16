@@ -14,13 +14,16 @@
     <StartupObject>Tozot.Program</StartupObject>
     <AssemblyTitle>Hylian Triforce Trainer &amp; Save Editor</AssemblyTitle>
     <Product>Hylian Triforce Trainer &amp; Save Editor</Product>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <!-- The user's own icon: exe, window, taskbar and shortcuts. -->
-    <ApplicationIcon>Assets\TOZOT.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\HylianTriforce.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\TOZOT.ico" />
+    <!-- The user's shield logo. Assets\make_logo.py cuts these from HylianTriforceLogo_source.jpg. -->
+    <Resource Include="Assets\HylianTriforce.ico" />
+    <Resource Include="Assets\HylianTriforceShield.png" />
+    <Resource Include="Assets\HylianTriforceLogo.png" />
   </ItemGroup>
 
 </Project>

@@ -39,8 +39,16 @@ public sealed class GameMemory : IDisposable
 
     GameMemory(int pid, IntPtr h) { ProcessId = pid; handle = h; }
 
+    /// <summary>
+    /// The running game: ocarina.exe, or a renamed copy of it such as ocarina-dlss.exe. "Ocarina of Time.exe" is only
+    /// the small launcher that starts it, so it is skipped. Attach still verifies the layout before any write.
+    /// </summary>
     public static Process? FindGame() =>
-        Process.GetProcessesByName("ocarina").FirstOrDefault();
+        Process.GetProcesses()
+            .Where(p => p.ProcessName.StartsWith("ocarina", StringComparison.OrdinalIgnoreCase)
+                     && !p.ProcessName.Equals("Ocarina of Time", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.ProcessName.Equals("ocarina", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
 
     /// <summary>Attaches and verifies the manager; throws with a plain reason when anything does not match.</summary>
     public static GameMemory Attach()
@@ -144,14 +152,17 @@ public sealed class GameMemory : IDisposable
             plan.Add((f, addr, before, after));
         }
         LastAction.Clear();
+        LastActionName = actionName;   // before the writes, so a part-done action is undone under its own name
         foreach (var (f, addr, before, after) in plan)
         {
             if (!WriteProcessMemory(handle, addr, after, after.Length, out var n) || n != after.Length)
                 throw new Win32Exception(Marshal.GetLastWin32Error(), $"Could not write {f.Name}");
             LastAction.Add((f, before));
         }
-        LastActionName = actionName;
     }
+
+    /// <summary>Drops the Undo entry, for a change Undo can't put back (one the game holds in its own handles).</summary>
+    public void ForgetUndo() { LastAction.Clear(); LastActionName = null; }
 
     /// <summary>A repeated write that is not an action (no Undo entry): the infinite-ammo refill. Verified lookup first.</summary>
     public void Keep(Field f, uint v)

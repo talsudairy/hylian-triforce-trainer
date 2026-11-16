@@ -73,7 +73,7 @@ public sealed class MainWindow : Window
         Width = 900; Height = 860; MinWidth = 760; MinHeight = 620;
         Background = Theme.Bg; Foreground = Theme.Text;
         FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"); FontSize = 14;
-        Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/TOZOT.ico"));
+        Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/HylianTriforce.ico"));
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         SourceInitialized += (_, _) => { Theme.DarkTitleBar(this); RegisterHotkeys(); };
         gameDir = LoadGameDir();
@@ -85,7 +85,8 @@ public sealed class MainWindow : Window
         title.Children.Add(new TextBlock { Text = "Hylian Triforce", FontFamily = Theme.Serif, FontSize = 28, Foreground = Theme.Gold });
         title.Children.Add(new TextBlock { Text = "Trainer and save editor for Ocarina of Time", Foreground = Theme.Dim });
         var head = new DockPanel { Margin = new Thickness(24, 18, 24, 10) };
-        var icon = new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/TOZOT.ico")), Width = 56, Height = 56, Margin = new Thickness(0, 0, 14, 0) };
+        var icon = new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/HylianTriforceShield.png")), Width = 68, Height = 68, Margin = new Thickness(0, 0, 14, 0) };
+        RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
         DockPanel.SetDock(icon, Dock.Left);
         var folder = Theme.Row(Theme.Label("Game folder", dim: true), gameDirText, browse);
         folder.HorizontalAlignment = HorizontalAlignment.Right;
@@ -351,27 +352,65 @@ public sealed class MainWindow : Window
     {
         if (live == null || !live.Alive) throw new InvalidOperationException("Attach to the game first (the game must be running with a save loaded).");
         if (!uint.TryParse(liveHearts.Text.Trim(), out uint n) || n < 1 || n > 20) throw new ArgumentException("Heart containers: a number from 1 to 20.");
+        if (settingContainers) { Log("Heart containers: still finding the game's counters, one moment."); return; }
         uint q = n * 4;
-        if (containers.Found == 0 || !containers.Valid(live)) containers.Find(live);
-        if (health.Kept.Found == 0 || !health.Kept.Valid(live)) health.Kept.Find(live);
-        live.Apply("Set heart containers", new[] { (Fields.Get("PlayerStatus.MaxLife"), q), (Fields.Get("PlayerStatus.Life"), q) });
-        containers.Set(live, q);     // the game's own counters, so the change sticks
-        health.Kept.Set(live, q);
-        Log($"Heart containers: {n}, hearts filled.");
-        RefreshLive();
+        var g = live;
+        bool findContainers = containers.Found == 0 || !containers.Valid(g), findHearts = health.Kept.Found == 0 || !health.Kept.Valid(g);
+        if (!findContainers && !findHearts) { FinishContainers(g, n, q); return; }
+        // the search takes seconds: off the UI thread, so the window doesn't freeze
+        settingContainers = true;
+        Log("Heart containers: finding the game's counters (a few seconds)...");
+        Task.Run(() => { if (findContainers) containers.Find(g); if (findHearts) health.Kept.Find(g); }).ContinueWith(t =>
+        {
+            settingContainers = false;
+            if (live != g || !g.Alive) return;
+            if (t.Exception != null) { Log("Not done: " + (t.Exception.InnerException ?? t.Exception).Message); return; }
+            Guard(() => FinishContainers(g, n, q));
+        }, TaskScheduler.FromCurrentSynchronizationContext());
     });
+
+    bool settingContainers;
+
+    void FinishContainers(GameMemory g, uint n, uint q)
+    {
+        g.Apply("Set heart containers", new[] { (Fields.Get("PlayerStatus.MaxLife"), q), (Fields.Get("PlayerStatus.Life"), q) });
+        bool held = containers.Set(g, q) != null;     // the game's own counters, so the change sticks
+        health.Kept.Set(g, q);
+        g.ForgetUndo();   // the game copies its counters over the records every frame, so Undo could not put this back
+        Log(held
+            ? $"Heart containers: {n}, hearts filled. Undo can't take this back: to go back, set the old number."
+            : "Heart containers not kept: the game's own counter was not found, so the game puts the old number back. Load your save and be in the game (not the title screen), then try again.");
+        RefreshLive();
+    }
 
     void FullHeal()
     {
         if (live == null || !live.Alive) return;
+        var g = live;
         try
         {
-            if (health.Kept.Found == 0 || !health.Kept.Valid(live)) health.Kept.Find(live);
-            uint max = health.Kept.Max(live);
-            if (health.Kept.Set(live, max) == null) live.Keep(Fields.Get("PlayerStatus.Life"), max);
-            Log($"F3: hearts filled ({max / 4.0:0.##}).");
+            if (health.Kept.Found > 0 && health.Kept.Valid(g)) { FillHearts(g); return; }
         }
-        catch (Exception ex) { Log("F3 not done: " + ex.Message); }
+        catch (Exception ex) { Log("F3 not done: " + ex.Message); return; }
+        if (healSearching) return;   // F3 pressed again while the search runs
+        // after an area load the old handle is gone: search off the UI thread so the game and window don't stall
+        healSearching = true;
+        Task.Run(() => health.Kept.Find(g)).ContinueWith(t =>
+        {
+            healSearching = false;
+            if (live != g || !g.Alive) return;
+            if (t.Exception != null) { Log("F3 not done: " + (t.Exception.InnerException ?? t.Exception).Message); return; }
+            try { FillHearts(g); } catch (Exception ex) { Log("F3 not done: " + ex.Message); }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    bool healSearching;
+
+    void FillHearts(GameMemory g)
+    {
+        uint max = health.Kept.Max(g);
+        if (health.Kept.Set(g, max) == null) g.Keep(Fields.Get("PlayerStatus.Life"), max);
+        Log($"F3: hearts filled ({max / 4.0:0.##}).");
     }
 
     void FillWallet()
@@ -445,7 +484,15 @@ public sealed class MainWindow : Window
             m.Searching = false;
             if (m.Box.IsChecked != true || live != g) return;
             uint max;
-            try { max = m.Kept.Max(g); } catch (Exception ex) { m.Box.IsChecked = false; Log("Not done: " + ex.Message); return; }
+            try { max = m.Kept.Max(g); }
+            catch (Exception ex)
+            {
+                // on a re-search, don't let this turn off the remembered switch (restoring keeps SaveSwitches out)
+                if (!first) restoring = true;
+                m.Box.IsChecked = false;
+                restoring = false;
+                Log("Not done: " + ex.Message); return;
+            }
             if (first && max == 0) { m.Box.IsChecked = false; Log($"Not done: {m.What} have no maximum yet in this save (no magic meter yet?)."); return; }
             m.RecordOnly = t.Result == 0;
             if (m.RecordOnly && m == health)
@@ -600,8 +647,17 @@ public sealed class MainWindow : Window
         if (problem != null) { saveState.Children.Clear(); saveState.Children.Add(Theme.Label(problem, dim: true)); return; }
         foreach (var d in slots)
         {
-            var s = new SaveFile(d);
-            saveSlot.Items.Add($"{Path.GetFileName(d).Replace("slot_", "Slot ")}  ·  {Hearts(s.Get(Fields.Get("PlayerStatus.MaxLife")))} hearts, {s.Get(Fields.Get("PlayerStatus.CurrentRupee"))} rupees  ·  saved {File.GetLastWriteTime(s.Path):g}");
+            var slot = Path.GetFileName(d).Replace("slot_", "Slot ");
+            try   // one unreadable slot must not hide the slots after it
+            {
+                var s = new SaveFile(d);
+                saveSlot.Items.Add($"{slot}  ·  {Hearts(s.Get(Fields.Get("PlayerStatus.MaxLife")))} hearts, {s.Get(Fields.Get("PlayerStatus.CurrentRupee"))} rupees  ·  saved {File.GetLastWriteTime(s.Path):g}");
+            }
+            catch (Exception ex)
+            {
+                saveSlot.Items.Add($"{slot}  ·  can't be read ({ex.Message})");
+                Log($"{slot} can't be read: {ex.Message}");
+            }
         }
         saveSlot.SelectedIndex = 0;
     });
@@ -801,8 +857,12 @@ public sealed class MainWindow : Window
         var d = new OpenFolderDialog { Title = "The game's folder (the one with Ocarina of Time.exe)", InitialDirectory = gameDir };
         if (d.ShowDialog(this) != true) return;
         gameDir = d.FolderName;
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
-        File.WriteAllText(SettingsFile, gameDir);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
+            File.WriteAllText(SettingsFile, gameDir);
+        }
+        catch (Exception ex) { Log("The game folder is used now but couldn't be remembered for next time: " + ex.Message); }
         ShowGameDir();
     }
 

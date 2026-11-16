@@ -121,10 +121,12 @@ public static class Setup
             Title = "Install " + AppName, Width = 440, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.CenterScreen, Background = Theme.Bg, Foreground = Theme.Text,
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"), FontSize = 14,
-            Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/TOZOT.ico")),
+            Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/HylianTriforce.ico")),
         };
         var root = new StackPanel { Margin = new Thickness(32, 28, 32, 24) };
-        root.Children.Add(new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/TOZOT.ico")), Width = 80, Height = 80 });
+        var logo = new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/HylianTriforceLogo.png")), Height = 210 };
+        RenderOptions.SetBitmapScalingMode(logo, BitmapScalingMode.HighQuality);
+        root.Children.Add(logo);
         root.Children.Add(new TextBlock { Text = AppName, FontSize = 22, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 2), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center });
         root.Children.Add(new TextBlock { Text = "Version " + Version, Foreground = Theme.Dim, HorizontalAlignment = HorizontalAlignment.Center });
         root.Children.Add(new TextBlock

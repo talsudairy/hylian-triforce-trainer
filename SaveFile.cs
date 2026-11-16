@@ -66,7 +66,7 @@ public sealed class SaveFile
         // game copies whole into its working copy
         var profile = Directory.GetParent(SlotDir)!.Parent!.Parent!.FullName;
         var dest = System.IO.Path.Combine(profile, "TOZOT-backups",
-            $"{System.IO.Path.GetFileName(SlotDir)}-{DateTime.Now:yyyyMMdd-HHmmss}");
+            $"{System.IO.Path.GetFileName(SlotDir)}-{DateTime.Now:yyyyMMdd-HHmmss-fff}");   // milliseconds: two changes in one second each get a backup
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(SlotDir))
             File.Copy(file, System.IO.Path.Combine(dest, System.IO.Path.GetFileName(file)), overwrite: false);
