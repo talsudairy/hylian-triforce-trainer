@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>Hylian Triforce Trainer &amp; Save Editor</AssemblyName>
+    <RootNamespace>Tozot</RootNamespace>
+    <StartupObject>Tozot.Program</StartupObject>
+    <AssemblyTitle>Hylian Triforce Trainer &amp; Save Editor</AssemblyTitle>
+    <Product>Hylian Triforce Trainer &amp; Save Editor</Product>
+    <Version>1.1.0</Version>
+    <!-- The user's own icon: exe, window, taskbar and shortcuts. -->
+    <ApplicationIcon>Assets\TOZOT.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\TOZOT.ico" />
+  </ItemGroup>
+
+</Project>
