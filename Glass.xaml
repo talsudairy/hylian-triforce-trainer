@@ -220,7 +220,8 @@
                                 Background="{StaticResource GlassFill}" BorderBrush="{StaticResource GlassRim}" BorderThickness="1">
                             <TabPanel IsItemsHost="True" />
                         </Border>
-                        <ContentPresenter ContentSource="SelectedContent" />
+                        <!-- this name lets screen readers (UI Automation) reach the tab's contents -->
+                        <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" />
                     </DockPanel>
                 </ControlTemplate>
             </Setter.Value>

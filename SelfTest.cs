@@ -36,6 +36,47 @@ public static class SelfTest
                 Check($"hearts handle search: {found} found in {t.Elapsed.TotalSeconds:0.0} s, all valid: {kept.Valid(g)}", found > 0);
                 return fails == 0 ? 0 : 1;
             }
+            if (mode == "--selftest-hearts")   // infinite hearts: lower the hearts through the game's counter, then the refill
+            {
+                using var g = GameMemory.Attach();
+                Check($"attached to {g.Runner.Name}, process {g.ProcessId}", true);
+                var life = Fields.Get("PlayerStatus.Life");
+                var kept = Kept.Health();
+                Check($"hearts counter found: {kept.Find(g)}", kept.Found > 0);
+                uint max = kept.Max(g), l0 = g.Get(life), low = max > 4 ? max - 4 : 1;
+                log.WriteLine($"     before: life {l0} of {max}");
+                Check("lowered one heart through the game's counter", kept.Set(g, low) == low);
+                Thread.Sleep(1500);
+                Check($"the game took the lower value (record {g.Get(life)}, expected {low})", g.Get(life) == low);
+                Check("refill wrote the counter", kept.TopUp(g) == max);
+                Thread.Sleep(1500);
+                Check($"hearts full again and held after 1.5 s: {g.Get(life)} of {max}", g.Get(life) == max);
+                return fails == 0 ? 0 : 1;
+            }
+            if (mode == "--selftest-setlife")   // test helper: --selftest-setlife <quarter hearts> <log>
+            {
+                using var g = GameMemory.Attach();
+                var kept = Kept.Health(); kept.Find(g);
+                uint v = uint.Parse(args[1]);
+                Check($"life set to {v} through the game's counter", kept.Set(g, v) == v);
+                return fails == 0 ? 0 : 1;
+            }
+            if (mode == "--selftest-peek")   // test helper: reads hearts and rupees only
+            {
+                using var g = GameMemory.Attach();
+                log.WriteLine($"life {g.Get(Fields.Get("PlayerStatus.Life"))} max {g.Get(Fields.Get("PlayerStatus.MaxLife"))} rupees {g.Get(Fields.Get("PlayerStatus.CurrentRupee"))}");
+                return 0;
+            }
+            if (mode == "--selftest-setrupees" || mode == "--selftest-setfield")   // test helpers: <n> <log>, or <field> <n> <log>
+            {
+                using var g = GameMemory.Attach();
+                var rup = Fields.Get(mode == "--selftest-setfield" ? args[1] : "PlayerStatus.CurrentRupee");
+                if (mode == "--selftest-setfield") args = args.Skip(1).ToArray();
+                uint v = uint.Parse(args[1]);
+                g.Keep(rup, v);
+                Check($"{rup.Name} set to {v}: {g.Get(rup)}", g.Get(rup) == v);
+                return fails == 0 ? 0 : 1;
+            }
             if (mode == "--selftest-rupees")   // one live change, then Undo: rupees to 99 and back
             {
                 using var g = GameMemory.Attach();
