@@ -47,7 +47,7 @@ It has two halves:
 
 ## Install
 
-1. Download **Hylian Triforce Setup.exe** from [Releases](../../releases).
+1. Download **Hylian.Triforce.Setup.exe** from [Releases](../../releases/latest).
 2. Run it and click **Install**. It installs for your Windows account only and needs no administrator rights. It adds a Start menu shortcut, an optional desktop shortcut and an entry in **Settings → Apps**.
 3. Running the setup again updates it. It also replaces an older install from when the trainer was called **TOZOT**.
 
