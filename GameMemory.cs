@@ -258,6 +258,38 @@ public sealed class GameMemory : IDisposable
         return found;
     }
 
+    /// <summary>
+    /// Research (reads only): every 4-aligned place in the game's writable memory that holds this hash, with 16 bytes
+    /// before it and 28 after, so a handle's layout can be read off. Capped at 200 places.
+    /// </summary>
+    public List<(ulong addr, byte[] bytes)> FindHashContexts(uint hash)
+    {
+        var found = new List<(ulong, byte[])>();
+        var key = BitConverter.GetBytes(hash);
+        const int Chunk = 16 << 20;
+        var buf = new byte[Chunk];
+        ulong addr = Runner.ScanStart;
+        while (addr < Runner.ScanEnd && found.Count < 200 && VirtualQueryEx(handle, addr, out var mi, Marshal.SizeOf<MemInfo>()) != 0)
+        {
+            if (mi.State == 0x1000 && mi.Protect == 0x04)
+                for (ulong off = 0; off < mi.Size && found.Count < 200; off += Chunk - 64)
+                {
+                    int n = (int)Math.Min((ulong)Chunk, mi.Size - off);
+                    if (!ReadProcessMemory(handle, mi.Base + off, buf, n, out var got) || got < 64) continue;
+                    var span = buf.AsSpan(0, (int)got);
+                    for (int i = 16, j; i < span.Length - 32 && (j = span[i..^32].IndexOf(key)) >= 0; i += j + 4)
+                    {
+                        int at = i + j;
+                        if ((at & 3) != 0) continue;
+                        found.Add((mi.Base + off + (ulong)at - 16, span.Slice(at - 16, 48).ToArray()));
+                        if (found.Count >= 200) break;
+                    }
+                }
+            addr = mi.Base + mi.Size;
+        }
+        return found;
+    }
+
     /// <summary>The value in a handle found by FindHandles, or null when the memory no longer holds that handle.</summary>
     public uint? HandleValue(ulong obj, uint hash)
     {

@@ -16,7 +16,7 @@ public sealed class MainWindow : Window
     static readonly string SettingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Hylian Triforce", "settings.txt");
     static readonly string OldSettingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TOZOT", "settings.txt");
     static readonly string[] Wallets = { "Small", "Medium", "Large" };
-    static readonly string[] BottleLetters = { "A", "B", "C", "D", "E" };
+    internal static readonly string[] BottleLetters = { "A", "B", "C", "D", "E" };
 
     string gameDir;
     GameMemory? live;
@@ -215,7 +215,10 @@ public sealed class MainWindow : Window
 
         var setB = Theme.Button("Set bottle", accent: true);
         setB.Click += (_, _) => LiveDo("Set bottle", () => BottleChanges(liveBottle.SelectedIndex, liveContents.SelectedIndex));
-        p.Children.Add(Theme.Card("Bottles and potions", Theme.Row(liveBottle, liveContents, setB)));
+        var removeB = Theme.Button("Remove bottle");
+        removeB.Click += (_, _) => LiveDo("Remove bottle", () => BottleRemoval(liveBottle.SelectedIndex, f => live!.Get(f)));
+        p.Children.Add(Theme.Card("Bottles and potions", Theme.Row(liveBottle, liveContents, setB, removeB),
+            Theme.Label("Remove bottle takes the chosen bottle away, not just empties it.", dim: true)));
 
         foreach (var (box, kind) in itemBoxes)
         {
@@ -630,7 +633,10 @@ public sealed class MainWindow : Window
 
         var setB = Theme.Button("Set bottle", accent: true);
         setB.Click += (_, _) => SaveDo("Set bottle", _ => BottleChanges(saveBottle.SelectedIndex, saveContents.SelectedIndex));
-        p.Children.Add(Theme.Card("Bottles and potions", Theme.Row(saveBottle, saveContents, setB)));
+        var removeB = Theme.Button("Remove bottle");
+        removeB.Click += (_, _) => SaveDo("Remove bottle", s => BottleRemoval(saveBottle.SelectedIndex, s.Get));
+        p.Children.Add(Theme.Card("Bottles and potions", Theme.Row(saveBottle, saveContents, setB, removeB),
+            Theme.Label("Remove bottle takes the chosen bottle away, not just empties it.", dim: true)));
 
         var export = Theme.Button("Export for console", accent: true);
         export.Click += (_, _) => ExportForConsole();
@@ -758,13 +764,34 @@ public sealed class MainWindow : Window
         return 0;
     }
 
-    static IEnumerable<(Field, uint)> BottleChanges(int bottle, int contents)
+    internal static IEnumerable<(Field, uint)> BottleChanges(int bottle, int contents)
     {
         if (bottle < 0 || contents < 0) throw new ArgumentException("Choose a bottle and what to put in it.");
         string b = BottleLetters[bottle];
         yield return (Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.BottleItem"), Murmur.Hash(Fields.BottleContents[contents]));
-        var valid = Fields.All.FirstOrDefault(f => f.Name == $"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.IsValid");
-        if (valid != null) yield return (valid, 1u);   // the bottle itself is owned
+        yield return (BottleValid(b), 1u);           // the bottle itself is owned
+        yield return (Fields.Get(HasBottle), 1u);    // and Link has a bottle
+    }
+
+    const string HasBottle = "IsGet.Item_Bottle";
+    static Field BottleValid(string letter) => Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{letter}.IsValid");
+
+    /// <summary>
+    /// Takes a bottle away: the slot is emptied and no longer owned. When it was the last owned bottle, "has a bottle"
+    /// is cleared too. The "ever caught" log (IsGet.Item_Bottle_&lt;contents&gt;) is left as it is.
+    /// </summary>
+    internal static IEnumerable<(Field, uint)> BottleRemoval(int bottle, Func<Field, uint> get)
+    {
+        if (bottle < 0) throw new ArgumentException("Choose the bottle to remove.");
+        string b = BottleLetters[bottle];
+        if (get(BottleValid(b)) == 0) throw new InvalidOperationException($"Bottle {b} is not owned: nothing to remove.");
+        var changes = new List<(Field, uint)>
+        {
+            (Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.BottleItem"), Murmur.Hash("Empty")),
+            (BottleValid(b), 0u),
+        };
+        if (!BottleLetters.Where(x => x != b).Any(x => get(BottleValid(x)) != 0)) changes.Add((Fields.Get(HasBottle), 0u));
+        return changes;
     }
 
     static uint ParseRupees(string s)
@@ -786,7 +813,7 @@ public sealed class MainWindow : Window
 
     static string Spaced(string s) => Regex.Replace(s, "(?<=[a-z0-9])(?=[A-Z])", " ");
 
-    static IEnumerable<string> ItemIds() => Fields.All.Where(f => f.Name.StartsWith("IsGet.")).Select(f => f.Name[6..]);
+    static IEnumerable<string> ItemIds() => Fields.All.Where(f => f.Name.StartsWith("IsGet.") && f.Name != HasBottle).Select(f => f.Name[6..]);
 
     static string CategoryOf(string id) => id switch
     {

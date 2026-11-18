@@ -123,6 +123,9 @@ public static class Fields
         new("IsGet.Weapon_Sword_Giant", FieldType.Bool, 9013),
         new("IsGet.Weapon_Sword_Kokiri", FieldType.Bool, 9014),
         new("IsGet.Weapon_Sword_Master", FieldType.Bool, 9015),
+        // "Has a bottle": 1 while any bottle slot is owned (checked against saves: off with none, on with A-E owned).
+        // Kept out of the item list; the bottle buttons set and clear it.
+        new("IsGet.Item_Bottle", FieldType.Bool, 8857),
         new("PlayerStatus.AssignableItem.BottleInfo.BottleA.BottleItem", FieldType.Enum, 60),
         new("PlayerStatus.AssignableItem.BottleInfo.BottleA.IsValid", FieldType.Bool, 10756),
         new("PlayerStatus.AssignableItem.BottleInfo.BottleB.BottleItem", FieldType.Enum, 61),

@@ -36,6 +36,55 @@ public static class SelfTest
                 Check($"hearts handle search: {found} found in {t.Elapsed.TotalSeconds:0.0} s, all valid: {kept.Valid(g)}", found > 0);
                 return fails == 0 ? 0 : 1;
             }
+            if (mode == "--selftest-bottles")   // on a scratch copy of a profile: remove bottles, then give one back
+            {
+                var (_, slots, problem) = SaveFile.FindSlots(args[1]);
+                Check("slots found: " + (problem ?? slots.Length.ToString()), problem == null);
+                var slot = slots.First(d => MainWindow.BottleLetters.Any(b => new SaveFile(d).Get(Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.IsValid")) != 0));
+                Field valid(string b) => Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.IsValid");
+                Field item(string b) => Fields.Get($"PlayerStatus.AssignableItem.BottleInfo.Bottle{b}.BottleItem");
+                var has = Fields.Get("IsGet.Item_Bottle");
+                void Do(IEnumerable<(Field, uint)> changes) { var s = new SaveFile(slot); foreach (var (f, v) in changes.ToList()) s.Set(f, v); s.Write(); }
+                string Show() { var s = new SaveFile(slot); return string.Join(" ", MainWindow.BottleLetters.Select(b => $"{b}:{s.Get(valid(b))}")) + $" has-bottle {s.Get(has)}"; }
+                long size = new FileInfo(Path.Combine(slot, "progress.sav")).Length;
+                log.WriteLine($"     {Path.GetFileName(slot)} before: {Show()}");
+                var owned = MainWindow.BottleLetters.Where(b => new SaveFile(slot).Get(valid(b)) != 0).ToList();
+                // remove one bottle: it goes, the others stay, Link still has a bottle (if he had more than one)
+                Do(MainWindow.BottleRemoval(Array.IndexOf(MainWindow.BottleLetters, owned[0]), new SaveFile(slot).Get));
+                var s1 = new SaveFile(slot);
+                Check($"bottle {owned[0]} removed and emptied: {Show()}", s1.Get(valid(owned[0])) == 0 && s1.Get(item(owned[0])) == Murmur.Hash("Empty"));
+                Check("the other bottles are kept", owned.Skip(1).All(b => s1.Get(valid(b)) != 0));
+                Check("still has a bottle while others are left", s1.Get(has) == (owned.Count > 1 ? 1u : 0u));
+                bool refused = false;
+                try { MainWindow.BottleRemoval(Array.IndexOf(MainWindow.BottleLetters, owned[0]), s1.Get).ToList(); } catch (InvalidOperationException) { refused = true; }
+                Check("removing a bottle that isn't owned is refused", refused);
+                // remove the rest: no bottle left, "has a bottle" cleared
+                foreach (var b in owned.Skip(1)) Do(MainWindow.BottleRemoval(Array.IndexOf(MainWindow.BottleLetters, b), new SaveFile(slot).Get));
+                var s2 = new SaveFile(slot);
+                Check($"all bottles removed and has-bottle cleared: {Show()}", MainWindow.BottleLetters.All(b => s2.Get(valid(b)) == 0) && s2.Get(has) == 0);
+                // give one back
+                Do(MainWindow.BottleChanges(0, Array.IndexOf(Fields.BottleContents, "Fairy")));
+                var s3 = new SaveFile(slot);
+                Check($"Set bottle gives bottle A with a fairy and has-bottle: {Show()}", s3.Get(valid("A")) == 1 && s3.Get(item("A")) == Murmur.Hash("Fairy") && s3.Get(has) == 1);
+                Check("file size unchanged", new FileInfo(Path.Combine(slot, "progress.sav")).Length == size);
+                return fails == 0 ? 0 : 1;
+            }
+            if (mode == "--selftest-mpscan")   // reads only: every place the MP / MPMax / Life hashes sit, with the bytes around them
+            {
+                using var g = GameMemory.Attach();
+                log.WriteLine($"attached to {g.Runner.Name}, process {g.ProcessId}");
+                foreach (var n in new[] { "PlayerStatus.MP", "PlayerStatus.MPMax", "PlayerStatus.Life" })
+                {
+                    var f = Fields.Get(n); uint h = Murmur.Hash(n);
+                    log.WriteLine($"{n}: record {g.Get(f)}, hash {h:x8}");
+                    foreach (var (addr, bytes) in g.FindHashContexts(h))
+                    {
+                        var hex = string.Join(" ", Enumerable.Range(0, bytes.Length / 4).Select(i => BitConverter.ToUInt32(bytes, i * 4).ToString("x8")));
+                        log.WriteLine($"   at {addr:x} (hash at word 4): {hex}");
+                    }
+                }
+                return 0;
+            }
             if (mode == "--selftest-hearts")   // infinite hearts: lower the hearts through the game's counter, then the refill
             {
                 using var g = GameMemory.Attach();
