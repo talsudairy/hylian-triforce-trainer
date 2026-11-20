@@ -85,21 +85,22 @@ public static class SelfTest
                 }
                 return 0;
             }
-            if (mode == "--selftest-hearts")   // infinite hearts: lower the hearts through the game's counter, then the refill
+            if (mode == "--selftest-hearts" || mode == "--selftest-magic")   // infinite hearts or magic: lower through the game's copy, then the refill
             {
                 using var g = GameMemory.Attach();
                 Check($"attached to {g.Runner.Name}, process {g.ProcessId}", true);
-                var life = Fields.Get("PlayerStatus.Life");
-                var kept = Kept.Health();
-                Check($"hearts counter found: {kept.Find(g)}", kept.Found > 0);
-                uint max = kept.Max(g), l0 = g.Get(life), low = max > 4 ? max - 4 : 1;
+                bool magic = mode == "--selftest-magic";
+                var life = Fields.Get(magic ? "PlayerStatus.MP" : "PlayerStatus.Life");
+                var kept = magic ? Kept.Magic() : Kept.Health();
+                Check($"{(magic ? "magic" : "hearts")} copy found: {kept.Find(g)}", kept.Found > 0);
+                uint max = kept.Max(g), l0 = g.Get(life), low = max > 40 ? max - 40 : max > 4 ? max - 4 : 1;
                 log.WriteLine($"     before: life {l0} of {max}");
-                Check("lowered one heart through the game's counter", kept.Set(g, low) == low);
+                Check($"lowered to {low} through the game's copy", kept.Set(g, low) == low);
                 Thread.Sleep(1500);
                 Check($"the game took the lower value (record {g.Get(life)}, expected {low})", g.Get(life) == low);
-                Check("refill wrote the counter", kept.TopUp(g) == max);
+                Check("refill wrote the game's copy", kept.TopUp(g) == max);
                 Thread.Sleep(1500);
-                Check($"hearts full again and held after 1.5 s: {g.Get(life)} of {max}", g.Get(life) == max);
+                Check($"full again and held after 1.5 s: {g.Get(life)} of {max}", g.Get(life) == max);
                 return fails == 0 ? 0 : 1;
             }
             if (mode == "--selftest-setlife")   // test helper: --selftest-setlife <quarter hearts> <log>
@@ -113,7 +114,7 @@ public static class SelfTest
             if (mode == "--selftest-peek")   // test helper: reads hearts and rupees only
             {
                 using var g = GameMemory.Attach();
-                log.WriteLine($"life {g.Get(Fields.Get("PlayerStatus.Life"))} max {g.Get(Fields.Get("PlayerStatus.MaxLife"))} rupees {g.Get(Fields.Get("PlayerStatus.CurrentRupee"))}");
+                log.WriteLine($"life {g.Get(Fields.Get("PlayerStatus.Life"))} max {g.Get(Fields.Get("PlayerStatus.MaxLife"))} rupees {g.Get(Fields.Get("PlayerStatus.CurrentRupee"))} mp {g.Get(Fields.Get("PlayerStatus.MP"))} mpmax {g.Get(Fields.Get("PlayerStatus.MPMax"))}");
                 return 0;
             }
             if (mode == "--selftest-setrupees" || mode == "--selftest-setfield")   // test helpers: <n> <log>, or <field> <n> <log>

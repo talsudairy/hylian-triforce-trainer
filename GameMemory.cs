@@ -49,7 +49,7 @@ public sealed class GameMemory : IDisposable
 
     readonly IntPtr handle;
     public int ProcessId { get; }
-    public Runner Runner { get; }
+    public Runner Runner { get; private set; }
     ulong manager;   // host address
 
     /// <summary>The writes of the last action, for Undo: where, and the bytes that were there.</summary>
@@ -82,9 +82,40 @@ public sealed class GameMemory : IDisposable
         var h = OpenProcess(Access, false, p.Id);
         if (h == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not open the game's process");
         var g = new GameMemory(p.Id, h, runner);
-        try { g.Verify(); }
-        catch { g.Dispose(); throw; }
-        return g;
+        try { g.Verify(); return g; }
+        catch (Exception first)
+        {
+            // An engine update can map the game's memory somewhere else. The program image and its tables are the
+            // same, so try each large reservation of the process as the guest memory before giving up.
+            if (runner.Arena != 0)
+                foreach (var (b, size) in g.LargeReservations())
+                {
+                    if (b == runner.Arena) continue;
+                    g.Runner = runner with { Arena = b, ScanStart = b, ScanEnd = b + size };
+                    try { g.Verify(); return g; } catch { }
+                }
+            g.Dispose();
+            throw first is InvalidOperationException ? first : new InvalidOperationException(first.Message, first);
+        }
+    }
+
+    /// <summary>Reserved or committed allocations of 64 GB or more, largest first (where a runner keeps guest memory).</summary>
+    List<(ulong start, ulong size)> LargeReservations()
+    {
+        var sizes = new Dictionary<ulong, ulong>();
+        ulong a = 0;
+        while (a < 1UL << 47 && VirtualQueryEx(handle, a, out var m, Marshal.SizeOf<MemInfo>()) != 0)
+        {
+            if (m.State != 0x10000)   // not MEM_FREE
+            {
+                sizes.TryGetValue(m.AllocBase, out var s);
+                sizes[m.AllocBase] = Math.Max(s, m.Base + m.Size - m.AllocBase);
+            }
+            ulong next = m.Base + m.Size;
+            if (next <= a) break;
+            a = next;
+        }
+        return sizes.Where(kv => kv.Value >= 64UL << 30).OrderByDescending(kv => kv.Value).Select(kv => (kv.Key, kv.Value)).ToList();
     }
 
     public bool Alive => GetExitCodeProcess(handle, out var c) && c == 259;
@@ -256,6 +287,55 @@ public sealed class GameMemory : IDisposable
             addr = mi.Base + mi.Size;
         }
         return found;
+    }
+
+    /// <summary>
+    /// The game's tagged slots: {u32 tag0, u32 tag1, u32 tag2, u32 value} (Link's magic: MP, MPMax and a third hash).
+    /// Returns the host address of each value. Searches the game's writable memory; takes a few seconds.
+    /// </summary>
+    public List<ulong> FindTagged(uint[] tags)
+    {
+        var found = new List<ulong>();
+        var key = new byte[12];
+        for (int k = 0; k < 3; k++) BitConverter.GetBytes(tags[k]).CopyTo(key, 4 * k);
+        const int Chunk = 16 << 20;
+        var buf = new byte[Chunk];
+        ulong addr = Runner.ScanStart;
+        while (addr < Runner.ScanEnd && VirtualQueryEx(handle, addr, out var mi, Marshal.SizeOf<MemInfo>()) != 0)
+        {
+            if (mi.State == 0x1000 && mi.Protect == 0x04)   // MEM_COMMIT, PAGE_READWRITE
+                for (ulong off = 0; off < mi.Size; off += Chunk - 16)
+                {
+                    int n = (int)Math.Min((ulong)Chunk, mi.Size - off);
+                    if (!ReadProcessMemory(handle, mi.Base + off, buf, n, out var got) || got < 16) continue;
+                    var span = buf.AsSpan(0, (int)got - 4);
+                    for (int i = 0, j; (j = span[i..].IndexOf(key)) >= 0; i += j + 4)
+                    {
+                        int at = i + j;
+                        if ((at & 3) != 0) continue;
+                        ulong value = mi.Base + off + (ulong)at + 12;
+                        if (!found.Contains(value)) found.Add(value);
+                    }
+                }
+            addr = mi.Base + mi.Size;
+        }
+        return found;
+    }
+
+    /// <summary>The value of a tagged slot found by FindTagged, or null when its tags are no longer there.</summary>
+    public uint? TaggedValue(ulong value, uint[] tags)
+    {
+        var b = new byte[16];
+        if (!ReadProcessMemory(handle, value - 12, b, 16, out var got) || got != 16) return null;
+        for (int k = 0; k < 3; k++) if (BitConverter.ToUInt32(b, 4 * k) != tags[k]) return null;
+        return BitConverter.ToUInt32(b, 12);
+    }
+
+    /// <summary>Writes a tagged slot's value (its tags checked again first); no Undo entry, like Keep.</summary>
+    public bool KeepTagged(ulong value, uint[] tags, uint v)
+    {
+        if (TaggedValue(value, tags) == null) return false;
+        return WriteProcessMemory(handle, value, BitConverter.GetBytes(v), 4, out var n) && n == 4;
     }
 
     /// <summary>

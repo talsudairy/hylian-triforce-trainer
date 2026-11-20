@@ -14,7 +14,7 @@
     <StartupObject>Tozot.Program</StartupObject>
     <AssemblyTitle>Hylian Triforce Trainer &amp; Save Editor</AssemblyTitle>
     <Product>Hylian Triforce Trainer &amp; Save Editor</Product>
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
     <!-- The user's own icon: exe, window, taskbar and shortcuts. -->
     <ApplicationIcon>Assets\HylianTriforce.ico</ApplicationIcon>
   </PropertyGroup>
