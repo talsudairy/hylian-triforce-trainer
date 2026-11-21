@@ -6,10 +6,10 @@ using System.Windows.Shapes;
 
 namespace Tozot;
 
-/// <summary>Forest grove, liquid glass: the code-built pieces that read the styles in Glass.xaml.</summary>
+/// <summary>Hylian Triforce colours, liquid glass: the code-built pieces that read the styles in Glass.xaml.</summary>
 public static class Theme
 {
-    public static readonly Brush Bg = Hex("#0B1610"), Text = Hex("#F1EEDD"), Dim = Hex("#A9B8A2"), Gold = Hex("#D9B649"),
+    public static readonly Brush Bg = Hex("#0A1716"), Text = Hex("#EDF6F2"), Dim = Hex("#B3CBC0"), Gold = Hex("#F2D387"),
         Good = Hex("#8FE08A"), Bad = Hex("#F5978A"), Heart = Hex("#E8574A"), HeartEdge = Hex("#FFD2C8"), Gem = Hex("#4FD67A");
     public static readonly FontFamily Serif = new("Georgia, Cambria, serif");
 
@@ -103,16 +103,23 @@ public static class Theme
 
     // ---------------------------------------------------------------- the backdrop
 
-    /// <summary>Moss-dark backdrop with three soft glows drifting slowly behind the glass (the Prism recipe).</summary>
+    /// <summary>
+    /// Hylian Triforce's own window background (its launcher's radial teal: #2D5A49 to #142D28 to #0A1716, lit from the
+    /// top left) with three soft glows drifting slowly behind the glass (the Prism recipe).
+    /// </summary>
     public static UIElement Backdrop()
     {
         var g = new Grid { IsHitTestVisible = false, ClipToBounds = true };
-        g.Background = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#0F2116"), (Color)ColorConverter.ConvertFromString("#08120C"), 90);
+        var bg = new RadialGradientBrush { Center = new Point(0.07, 0.08), GradientOrigin = new Point(0.07, 0.08), RadiusX = 0.96, RadiusY = 1.2 };
+        bg.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#2D5A49"), 0));
+        bg.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#142D28"), 0.48));
+        bg.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#0A1716"), 1));
+        g.Background = bg;
         (string color, double size, HorizontalAlignment h, VerticalAlignment v, Thickness m, double dx, double dy, double secs)[] orbs =
         {
-            ("#7A2F8F55", 900, HorizontalAlignment.Left, VerticalAlignment.Top, new Thickness(-300, -320, 0, 0), 90, 60, 22),
-            ("#5C7FB341", 780, HorizontalAlignment.Right, VerticalAlignment.Center, new Thickness(0, 0, -280, 0), -100, -70, 26),
-            ("#4AD9B649", 700, HorizontalAlignment.Center, VerticalAlignment.Bottom, new Thickness(160, 0, 0, -340), 80, -40, 30),
+            ("#5A3F7A68", 900, HorizontalAlignment.Left, VerticalAlignment.Top, new Thickness(-300, -320, 0, 0), 90, 60, 22),
+            ("#40658C80", 780, HorizontalAlignment.Right, VerticalAlignment.Center, new Thickness(0, 0, -280, 0), -100, -70, 26),
+            ("#30D7A74F", 700, HorizontalAlignment.Center, VerticalAlignment.Bottom, new Thickness(160, 0, 0, -340), 80, -40, 30),
         };
         foreach (var o in orbs)
         {
@@ -130,11 +137,11 @@ public static class Theme
         return g;
     }
 
-    /// <summary>Dark title bar in the forest colour (Windows 11).</summary>
+    /// <summary>Dark title bar in Hylian Triforce's darkest teal (Windows 11).</summary>
     public static void DarkTitleBar(Window w)
     {
         var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-        int on = 1, caption = 0x00162114;   // COLORREF 0x00BBGGRR
+        int on = 1, caption = 0x0016170A;   // COLORREF 0x00BBGGRR
         DwmSetWindowAttribute(hwnd, 20, ref on, 4);
         DwmSetWindowAttribute(hwnd, 35, ref caption, 4);
     }

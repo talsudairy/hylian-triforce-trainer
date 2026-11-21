@@ -133,7 +133,9 @@ public sealed class MainWindow : Window
         log.Clear();
         if (GameMemory.FindGame() != null)
         {
+            rupeeHigh = 0;
             live = GameMemory.Attach();
+            try { RupeeTarget(live); } catch { }   // remember the rupees held at attach
             liveStatus.Text = $"Attached to {live.Runner.Name} (process {live.ProcessId}), checks passed"; liveStatus.Foreground = Theme.Good;
             RefreshLive();
             Log("Attached. The game's data tables match the expected layout.");
@@ -333,12 +335,25 @@ public sealed class MainWindow : Window
 
     uint WalletSize(GameMemory g) => WalletSizes[WalletOf(id => g.Get(Fields.Get("IsGet." + id)) != 0)];
 
+    /// <summary>
+    /// What F4 and infinite rupees fill to: the wallet's size, or the most rupees seen while attached when that is more
+    /// (at most 999). Hylian Triforce saves hold 832 rupees with the Large wallet, so 500 is not its real limit; filling
+    /// to the size alone would take rupees away.
+    /// </summary>
+    uint RupeeTarget(GameMemory g)
+    {
+        uint now = g.Get(Fields.Get("PlayerStatus.CurrentRupee"));
+        if (now <= 999 && now > rupeeHigh) rupeeHigh = now;
+        return Math.Max(WalletSize(g), rupeeHigh);
+    }
+    uint rupeeHigh;   // reset on attach
+
     void RupeeSwitch(bool on)
     {
         SaveSwitches();
         if (!on) { Log("Infinite rupees: off."); return; }
         if (live == null || !live.Alive) { Refuse(infRupees, "infinite rupees"); return; }
-        try { Log($"Infinite rupees: on, kept at {WalletSize(live)}."); }
+        try { Log($"Infinite rupees: on, kept at {RupeeTarget(live)}."); }
         catch (Exception ex) { infRupees.IsChecked = false; Log("Not done: " + ex.Message); return; }
         ammoTimer.Start();
         AmmoTick();
@@ -421,7 +436,7 @@ public sealed class MainWindow : Window
         if (live == null || !live.Alive) return;
         try
         {
-            uint size = WalletSize(live);
+            uint size = RupeeTarget(live);
             live.Keep(Fields.Get("PlayerStatus.CurrentRupee"), size);
             Log($"F4: wallet filled ({size} rupees).");
         }
@@ -456,7 +471,7 @@ public sealed class MainWindow : Window
             if (infRupees.IsChecked == true)
             {
                 var f = Fields.Get("PlayerStatus.CurrentRupee");
-                uint size = WalletSize(live);
+                uint size = RupeeTarget(live);
                 if (live.Get(f) < size) live.Keep(f, size);
             }
         }
@@ -547,7 +562,9 @@ public sealed class MainWindow : Window
     {
         live?.Dispose();
         live = null;
+        rupeeHigh = 0;
         live = GameMemory.Attach();
+        try { RupeeTarget(live); } catch { }   // remember the rupees held at attach
         liveStatus.Text = $"Attached to {live.Runner.Name} (process {live.ProcessId}), checks passed";
         liveStatus.Foreground = Theme.Good;
         Log("Attached. The game's data tables match the expected layout (Bool 11292, Int 1259, Enum 130 entries).");

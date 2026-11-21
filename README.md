@@ -18,7 +18,7 @@ It has two halves:
 | | |
 |---|---|
 | **Attach to the game** | Finds `ocarina.exe` (or a renamed copy) or Hylian Triforce's `Triforce.exe`, and checks the game's data tables against the expected layout before writing anything. |
-| **Rupees and wallet** | Set your rupees, upgrade your wallet, or tick **Infinite rupees** to keep the wallet full (99 / 200 / 500). |
+| **Rupees and wallet** | Set your rupees, upgrade your wallet, or tick **Infinite rupees** to keep the wallet full (99 / 200 / 500, or more when your save already holds more). |
 | **Items, weapons, songs and upgrades** | Add or remove any item by category, several at once. A check mark shows what you already have. |
 | **Bottles and potions** | Put anything in any of the five bottles: a fairy, potions, a fish, a bug and so on. |
 | **Infinite items** | Deku Nuts, Deku Sticks, Deku Seeds, Arrows, Bombs, Bombchus and Magic Beans. Each refills to the most your bag, quiver or pouch holds, and only once you can carry it. |
