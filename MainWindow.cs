@@ -337,16 +337,18 @@ public sealed class MainWindow : Window
 
     /// <summary>
     /// What F4 and infinite rupees fill to: the wallet's size, or the most rupees seen while attached when that is more
-    /// (at most 999). Hylian Triforce saves hold 832 rupees with the Large wallet, so 500 is not its real limit; filling
-    /// to the size alone would take rupees away.
+    /// (up to MaxRupees). Hylian Triforce saves hold 832, then 1000 rupees with the Large wallet, so 500 is not its real
+    /// limit and the real one is unknown; filling to the size alone would take rupees away.
     /// </summary>
     uint RupeeTarget(GameMemory g)
     {
         uint now = g.Get(Fields.Get("PlayerStatus.CurrentRupee"));
-        if (now <= 999 && now > rupeeHigh) rupeeHigh = now;
+        if (now <= MaxRupees && now > rupeeHigh) rupeeHigh = now;
         return Math.Max(WalletSize(g), rupeeHigh);
     }
     uint rupeeHigh;   // reset on attach
+    /// <summary>A sanity bound, not the game's limit (a save holds 1000 rupees; the field is a 32-bit number).</summary>
+    const uint MaxRupees = 9999;
 
     void RupeeSwitch(bool on)
     {
@@ -813,7 +815,7 @@ public sealed class MainWindow : Window
 
     static uint ParseRupees(string s)
     {
-        if (!uint.TryParse(s.Trim(), out uint r) || r > 999) throw new ArgumentException("Rupees: a number from 0 to 999.");
+        if (!uint.TryParse(s.Trim(), out uint r) || r > MaxRupees) throw new ArgumentException($"Rupees: a number from 0 to {MaxRupees}.");
         return r;
     }
 
