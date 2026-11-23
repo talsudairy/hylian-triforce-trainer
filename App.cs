@@ -27,7 +27,7 @@ public static class Program
         if (args.Length > 1 && args[0] == "--shots")   // README pictures, see MainWindow.TakeShots
         {
             var mw = new MainWindow { Left = 40, Top = 0 };
-            mw.ContentRendered += async (_, _) => { try { await mw.TakeShots(args[1], args.Length > 2 ? args[2] : null); } catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "error.txt"), ex.ToString()); mw.Close(); } };
+            mw.ContentRendered += async (_, _) => { try { await mw.TakeShots(args[1], args.Length > 2 && !args[2].StartsWith("--") ? args[2] : null, !args.Contains("--no-attach")); } catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "error.txt"), ex.ToString()); mw.Close(); } };
             return app.Run(mw);
         }
         Window w = Setup.IsSetupLaunch(args) ? Setup.CreateSetupWindow() : new MainWindow();

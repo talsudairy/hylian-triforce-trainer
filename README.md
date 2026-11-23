@@ -18,15 +18,15 @@ It has two halves:
 | | |
 |---|---|
 | **Attach to the game** | Finds `ocarina.exe` (or a renamed copy) or Hylian Triforce's `Triforce.exe`, and checks the game's data tables against the expected layout before writing anything. |
-| **Rupees and wallet** | Set your rupees, upgrade your wallet, or tick **Infinite rupees** to keep the wallet full (99 / 200 / 500, or more when your save already holds more). |
+| **Rupees and wallet** | Set your rupees, upgrade your wallet, or tick **Infinite rupees** to keep the wallet full (99 / 200 / 500, or more when your save already holds more). It never takes rupees away. |
 | **Items, weapons, songs and upgrades** | Add or remove any item by category, several at once. A check mark shows what you already have. |
-| **Bottles and potions** | Put anything in any of the five bottles: a fairy, potions, a fish, a bug and so on. |
+| **Bottles and potions** | Put anything in any of the five bottles: a fairy, potions, a fish, a bug and so on. **Remove bottle** takes a bottle away instead of just emptying it. |
 | **Infinite items** | Deku Nuts, Deku Sticks, Deku Seeds, Arrows, Bombs, Bombchus and Magic Beans. Each refills to the most your bag, quiver or pouch holds, and only once you can carry it. |
 | **Infinite health** | Your hearts fill back up right after every hit. |
 | **Infinite magic** | Your magic meter refills as you use it, once you have one. |
 | **Heart containers** | Set 1 to 20 heart containers while you play; your hearts fill to match. |
 | **Undo** | Puts back whatever the last live change replaced. |
-| **Hotkeys** | **F2** hides or shows the trainer, **F3** fills your hearts and **F4** fills your wallet. They work even while the game is in front. |
+| **Hotkeys** | **F2** hides or shows the trainer, **F3** fills your hearts and **F4** fills your wallet (never below what you already have). They work even while the game is in front. |
 | **Remembered switches** | Whatever you had ticked turns back on the next time you attach. |
 
 ![Live tab](docs/images/live-tab.png)
@@ -36,9 +36,9 @@ It has two halves:
 | | |
 |---|---|
 | **Save slots** | Lists every slot with its hearts, rupees and save time. |
-| **Automatic backups** | Before each change, the whole slot is copied into `profile\TOZOT-backups`. **Open backups** shows the folder. |
+| **Automatic backups** | Before each change, the whole slot is copied into a `TOZOT-backups` folder next to the game's save folder (`profile` for the PC port, `user` for Hylian Triforce). **Open backups** shows the folder. |
 | **Hearts** | Heal, or set 3 to 20 heart containers. |
-| **Rupees, wallet, items, bottles** | The same choices as the live tab, written into the save file. |
+| **Rupees, wallet, items, bottles** | The same choices as the live tab, including **Remove bottle**, written into the save file. |
 | **Export for Switch 2** | Packages a copy of all your save data as a folder and a zip for a console save manager. Your PC saves are not changed. This export has not been tried on a console. |
 
 ![Save editor tab](docs/images/save-editor.png)
@@ -60,7 +60,7 @@ To uninstall, use **Settings → Apps → Hylian Triforce Trainer & Save Editor 
 1. Start the game and load your save.
 2. Open the trainer and click **Attach to the game**.
 3. Tick switches or make changes. The Activity box at the bottom says what was done.
-4. For the save editor, close the game first and pick the game folder (the one containing `Ocarina of Time.exe`) with **Change**.
+4. For the save editor, close the game first and pick the game folder with **Change**: the one containing `Ocarina of Time.exe`, or for Hylian Triforce `%LOCALAPPDATA%\HylianTriforce\Game`.
 
 ---
 
@@ -68,7 +68,9 @@ To uninstall, use **Settings → Apps → Hylian Triforce Trainer & Save Editor 
 
 **Live changes.** The PC port keeps the game's state in a GameData manager. It holds typed tables (Bool, Int, Enum) of records named by MurmurHash3 hashes from the game's own schema, `GameDataList.Product.110`. The trainer finds a field the same way the game does: it looks up the hash, then checks the table index and the record's descriptor. If anything doesn't match, it writes nothing.
 
-**Hearts and magic.** A game system keeps these in its own small handle object, `{class pointer, value, name hash}`, and sends that value to GameData every frame. Writing only the GameData record is undone the next frame. So for these meters the trainer finds the handle in memory and writes there, and the game's own record follows it.
+**Hearts and magic.** The game keeps these meters in its own memory and sends their values to GameData every frame, so writing only the GameData record is undone the next frame. Hearts live in a small handle object, `{class pointer, value, name hash}`. Magic lives in a tagged slot, `{MP hash, MPMax hash, a third hash, value}`. The trainer finds each one in memory and writes there, and the game's own record follows it.
+
+**Hylian Triforce.** It runs the same game build, so the tables are the same. Only the addresses differ: its game memory sits at a fixed offset in the `Triforce.exe` process, and the trainer finds it again on its own if an engine update moves it.
 
 **Save files.** The save editor reads and writes the same records in `progress.sav` and keeps the file size unchanged.
 
@@ -86,10 +88,13 @@ There are hidden self-test modes that write a log file and show no window:
 |---|---|
 | `--selftest-items <log>` | Every infinite-item refill and the rupee write, against the running game |
 | `--selftest-health <log>` | Finding the hearts handle, a hit, the refill, and setting heart containers |
+| `--selftest-hearts <log>`, `--selftest-magic <log>` | Lowering hearts or magic through the game's own copy, then the refill |
+| `--selftest-read <log>` | Attaching and reading values, without writing anything |
+| `--selftest-bottles <game dir> <log>` | Removing bottles and giving one back, on a copy of a save |
 | `--selftest-live <log>` | A live set, read back, undo, and read back again |
 | `--selftest-save <game dir> <log>` | Each save-editor action on a slot, then a read-back |
 
-`--shots <dir> [game dir]` renders the pictures above.
+`--shots <dir> [game dir] [--no-attach]` renders the pictures above. With `--no-attach` it never touches a running game.
 
 ## Project layout
 
@@ -98,11 +103,11 @@ There are hidden self-test modes that write a log file and show no window:
 | `GameMemory.cs` | Attaching, verified record lookups, writes with undo, and the handle search |
 | `Fields.cs` | The field names and table indexes, matched to the game's schema |
 | `Ammo.cs` | Infinite-item rules: bag sizes and what each item needs |
-| `Health.cs` | Hearts, magic and heart-container handles |
+| `Health.cs` | Hearts and heart-container handles, and the magic slot |
 | `SaveFile.cs` | Reading and writing save files, and slot backups |
 | `MainWindow.cs` | The window, both tabs, switches and hotkeys |
 | `Setup.cs` | The per-user installer and uninstaller |
-| `Theme.cs`, `Glass.xaml` | The look |
+| `Theme.cs`, `Glass.xaml` | The look, in Hylian Triforce's own teal, sage and gold |
 
 ---
 

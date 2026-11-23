@@ -126,12 +126,12 @@ public sealed class MainWindow : Window
     /// Pictures for the README (hidden "--shots &lt;dir&gt; [game folder]" mode): attaches if the game is running, then
     /// renders each tab at its full height to PNG at 150 % scale. Changes nothing in the game or the saves.
     /// </summary>
-    public async Task TakeShots(string dir, string? folder)
+    public async Task TakeShots(string dir, string? folder, bool attach = true)
     {
         Directory.CreateDirectory(dir);
         if (folder != null) { gameDir = folder; ShowGameDir(); }
         log.Clear();
-        if (GameMemory.FindGame() != null)
+        if (attach && GameMemory.FindGame() != null)   // --no-attach: pictures without touching a running game
         {
             rupeeHigh = 0;
             live = GameMemory.Attach();
